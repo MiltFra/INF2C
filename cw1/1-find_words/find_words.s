@@ -85,8 +85,23 @@ END_LOOP:
 # End of reading file block.
 #------------------------------------------------------------------
 
+# Observe that "printing one word per line" 
+# is the same as "replacing ' ' with '\n'"
 
-# You can add your code here!
+        add $t0,$zero,$zero     # set char index
+        li $v0,11               # system call for printing a character from $a0
+loop:
+        lb $a0,input_text($t0)
+        li $t2,0                # '\0'
+        beq $a0,$t2,main_end
+        li $t2,32               # ' '
+        bne $a0,$t2,print       # if not a space, print straight to stdout
+        li $a0,10               # set value to print to '\n'
+print:
+        syscall
+        addi $t0,$t0,1
+        j loop
+
 
 
 #------------------------------------------------------------------
