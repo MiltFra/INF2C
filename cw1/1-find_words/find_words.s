@@ -88,7 +88,7 @@ END_LOOP:
 # Observe that "printing one word per line" 
 # is the same as "replacing ' ' with '\n'"
 
-        add $t0,$zero,$zero     # set char index
+        li $t0,0    # set char index
         li $v0,11               # system call for printing a character from $a0
 loop:
         lb $a0,input_text($t0)
