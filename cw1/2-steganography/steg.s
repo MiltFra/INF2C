@@ -85,9 +85,78 @@ END_LOOP:
 # End of reading file block.
 #------------------------------------------------------------------
 
+        la $t5,input_text               # char pointer
+        li $a1,0                        # line counter
+        li $a2,1                        # newline flag
+        li $v0,11                       # system call for printing a character
+line_loop:
+        li $t1,0                        # number of words read
+        lb $a0,0($t5)
+        beq $a0,$zero,main_end
+word_loop:
+        beq $t1,$a1,found_word          # read enough words for the line
+        addi $t1,$t1,1
+        jal skip_word
+        li $t7,32
+        beq $a0,$t7,word_loop           # $a0 is unchanged from skip_word
+                                        # if this does not get run, we are at the end
+                                        # of the line without having skipped enough
+                                        # words
+        li $a0,10                       # loading \n
+        syscall                         # printing newline
+        li $a2,1
+        j word_loop_end                     # we're not printing a word this time
+found_word:
+        jal print_word
+        li $t7,10
+        beq $t7,$a0,word_loop_end       # don't do any skipping if we're at the end of the line
+        jal skip_rest_of_line           # may just be '\n'
+word_loop_end:
+        addi $a1,$a1,1                  # done reading one more line
+        addi $t5,$t5,1                  # skip '\n' as well
+        j line_loop
 
-# You can add your code here!
+skip_word:
+        lb $a0,0($t5)                   # reading character from input
+        addi $t5,$t5,1                  # skip letter
+        li $t7,10                       # '\n'
+        beq $a0,$t7,skip_word_end
+        li $t7,32                       # ' '
+        beq $a0,$t7,skip_word_end
+        j skip_word
+skip_word_end:
+        jr $ra	                        
 
+skip_rest_of_line:
+        lb $a0,0($t5)
+        li $t7,10
+        beq $a0,$t7,skip_rest_of_line_end # only stop if we find '\n'
+        addi $t5,$t5,1                  # 
+        j skip_rest_of_line
+skip_rest_of_line_end:
+        jr $ra
+
+print_word:
+        beq $a2,$zero,not_new_line
+        li $a2,0
+        j print_word_loop
+not_new_line:                           # if we're not in a new line, print a space
+        li $a0,32
+        syscall
+print_word_loop:
+        lb $a0,0($t5)
+        li $t7,10                       # encountered \n
+        beq $a0,$t7,print_word_end
+        li $t7,32                       # encountered ' '
+        beq $a0,$t7,print_word_end
+        syscall                         # print *p to stdout 
+        addi $t5,$t5,1                  # move p right
+        j print_word_loop
+print_word_end:
+        jr $ra
+
+
+        
 
 #------------------------------------------------------------------
 # Exit, DO NOT MODIFY THIS BLOCK
