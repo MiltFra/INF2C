@@ -92,7 +92,7 @@ END_LOOP:
 line_loop:
         li $t1,0                        # number of words read
         lb $a0,0($t5)
-        beq $a0,$zero,main_end
+        beq $a0,$zero,end
 word_loop:
         beq $t1,$a1,found_word          # read enough words for the line
         addi $t1,$t1,1
@@ -154,6 +154,9 @@ print_word_loop:
         j print_word_loop
 print_word_end:
         jr $ra
+end:
+        li $a0,10
+        syscall
 
 
         
