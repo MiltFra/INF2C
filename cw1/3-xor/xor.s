@@ -23,11 +23,36 @@ newline:                      .asciiz  "\n"
         
 #-------------------------------------------------------------------------
 # Global variables in memory
+#=========================================================================
+# XOR Cipher Encryption
+#=========================================================================
+# Encrypts a given text with a given key.
+# 
+# Inf2C Computer Systems
+# 
+# Dmitrii Ustiugov
+# 9 Oct 2020
+# 
+#
+#=========================================================================
+# DATA SEGMENT
+#=========================================================================
+.data
+#-------------------------------------------------------------------------
+# Constant strings
+#-------------------------------------------------------------------------
+
+input_text_file_name:         .asciiz  "input_xor.txt"
+key_file_name:                .asciiz  "key_xor.txt"
+newline:                      .asciiz  "\n"
+        
+#-------------------------------------------------------------------------
+# Global variables in memory
 #-------------------------------------------------------------------------
 # 
 input_text:                   .space 10001       # Maximum size of input_text_file + NULL
 .align 4                                         # The next field will be aligned
-key:                          .space 5           # Maximum size of key_file + NULL
+key:                          .space 33          # Maximum size of key_file + NULL
 .align 4                                         # The next field will be aligned
 
 # You can add your data here!
@@ -98,21 +123,21 @@ END_LOOP:
 
         move $t0, $0                    # idx = 0
 
-READ_LOOP:                              # do {
+READ_LOOP1:                             # do {
         li   $v0, 14                    # system call for reading from file
         move $a0, $s0                   # file descriptor
                                         # key[idx] = c_input
         la   $a1, key($t0)              # address of buffer from which to read
         li   $a2,  1                    # read 1 char
         syscall                         # c_input = fgetc(key_file);
-        blez $v0, END_LOOP              # if(feof(key_file)) { break }
+        blez $v0, END_LOOP1             # if(feof(key_file)) { break }
         lb   $t1, key($t0)          
         addi $v0, $0, 10                # newline \n
-        beq  $t1, $v0, END_LOOP         # if(c_input == '\n')
+        beq  $t1, $v0, END_LOOP1        # if(c_input == '\n')
         addi $t0, $t0, 1                # idx += 1
-        j    READ_LOOP
-END_LOOP:
-        sb   $0,  key($t0)             # key[idx] = '\0'
+        j    READ_LOOP1
+END_LOOP1:
+        sb   $0,  key($t0)              # key[idx] = '\0'
 
         # Close the file 
 
