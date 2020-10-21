@@ -29,6 +29,10 @@ input_text:                   .space 10001       # Maximum size of input_text_fi
 .align 4                                         # The next field will be aligned
 hint:                         .space 101         # Maximum size of key_file + NULL
 .align 4                                         # The next field will be aligned
+decrypt_text:                 .space 10001       # same as input
+.align 4
+key_text:                     .space 10
+.align 4
 
 # You can add your data here!
 
@@ -123,9 +127,79 @@ END_LOOP1:
 #------------------------------------------------------------------
 # End of reading file block.
 #------------------------------------------------------------------
+        li $t7,0                        # key = 0;
+key_loop:
+        li $t0,256
+        beq $t7,$t0,key_not_found       # key == 0x100?
+        li $t6,0                        # i = 0
+decrypt_loop:
+        lb $t5,input_text($t6)          # c = input_text[i]
+        beqz $t5,decrypt_loop_end
+        li $t0,10
+        beq $t5,$t0,decrypt_is_whitespace
+        li $t0,32
+        beq $t5,$t0,decrypt_is_whitespace
+        xor $t5,$t5,$t7
+decrypt_is_whitespace:
+        sb $t5,decrypt_text($t6)
+        addi $t6,$t6,1
+        j decrypt_loop
+decrypt_loop_end:
+        sb $t5,decrypt_text($t6)        # setting final null character
+        la $t6,decrypt_text             # p = decrypt_text
+compare_loop:
+        lb $t0,0($t6)
+        beqz $t0,compare_loop_end
+        add $a0,$t6,$zero
+        la $a1,hint
+        jal compare_substring
+        bnez $v0,key_found
+        addi $t6,$t6,1                  # p++
+        j compare_loop
+compare_loop_end:
+        addi $t7,$t7,1
+        j key_loop
+key_not_found:
+        li $a0,-1
+        li $v0,17                       # syscall for exit with value
+        syscall
+key_found:
+        li $t0,9
+        sb $zero,key_text($t0)
+        li $t0,8                        # i = 8
+        li $t1,10
+        sb $t1,key_text($t0)
+print_loop:
+        beqz $t0,print_loop_end
+        addi $t0,$t0,-1
+        li $t1,1
+        and $t1,$t1,$t7
+        addi $t1,$t1,48
+        sb $t1,key_text($t0)
+        srl $t7,$t7,1
+        j print_loop
+print_loop_end:
+        li $v0,4                        # syscall for print string
+        la $a0,key_text
+        syscall
+        j main_end
 
 
-# You can add your code here!
+compare_substring:                      # $a0 = p, $a1 = q, $v0 = return value
+        lb $t0,0($a0)
+        lb $t1,0($a1)
+        beqz $t0,compare_substring_end
+        li $t2,10
+        bne $t0,$t2,compare_substring_not_eol 
+        li $t0,32
+compare_substring_not_eol:
+        bne $t0,$t1,compare_substring_end
+        addi $a0,$a0,1
+        addi $a1,$a1,1
+        j compare_substring
+compare_substring_end:
+        seq $v0, $t1, $zero
+        jr $ra
 
 
 #------------------------------------------------------------------
