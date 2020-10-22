@@ -16,7 +16,7 @@ int compare_substring(char *p, char *q) {
     p++;
     q++;
   }
-  return *q == '\0';
+  return *q == '\0' && *p == ' ';
 }
 
 int main(void) {
@@ -59,6 +59,9 @@ int main(void) {
     while (*p != 0) {
       if (compare_substring(p, hint_text)) {
         break;
+      }
+      while (*p != ' ' && *p != '\n') {
+        p++;
       }
       p++;
     }
