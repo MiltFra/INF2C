@@ -154,6 +154,15 @@ compare_loop:
         la $a1,hint
         jal compare_substring
         bnez $v0,key_found
+skip_word_loop:
+        lb $t0,0($t6)
+        li $t1,10
+        beq $t0,$t1,skip_word_loop_end
+        li $t1,32
+        beq $t0,$t1,skip_word_loop_end
+        addi $t6,$t6,1
+        j skip_word_loop
+skip_word_loop_end:
         addi $t6,$t6,1                  # p++
         j compare_loop
 compare_loop_end:
@@ -204,6 +213,11 @@ compare_substring_not_eol:
         j compare_substring
 compare_substring_end:
         seq $v0, $t1, $zero
+        li $t2,32
+        seq $t3, $t0, $t2
+        seq $t4, $t0, $zero
+        or $t3, $t3, $t4
+        and $v0,$v0,$t3
         jr $ra
 
 
