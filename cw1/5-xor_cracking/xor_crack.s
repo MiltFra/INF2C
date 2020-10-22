@@ -160,9 +160,14 @@ compare_loop_end:
         addi $t7,$t7,1
         j key_loop
 key_not_found:
-        li $a0,-1
-        li $v0,17                       # syscall for exit with value
+        li $v0,11                      # syscall for exit with value
+        li $a0,'-'
         syscall
+        li $a0,'1'
+        syscall
+        li $a0,'\n'
+        syscall
+        j main_end
 key_found:
         li $t0,9
         sb $zero,key_text($t0)
