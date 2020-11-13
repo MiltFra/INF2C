@@ -133,7 +133,23 @@ void execute() {
 
 void memory_access() {
   ///@students: appropriate calls to functions defined in memory_hierarchy.c
-  ///must be added
+  /// must be added
+  struct ctrl_signals *control     = &arch_state.control;
+  struct instr_meta *IR_meta       = &arch_state.IR_meta;
+  struct pipe_regs *curr_pipe_regs = &arch_state.curr_pipe_regs;
+  struct pipe_regs *next_pipe_regs = &arch_state.next_pipe_regs;
+
+  if (control->RegDst && control->MemtoReg) {  // 4a: Result write
+    memory_write(IR_meta->reg_11_15, curr_pipe_regs->ALUOut);
+  } else if (control->IorD && control->MemRead) {  // 4b: Load from mem
+    next_pipe_regs->MDR = memory_read(curr_pipe_regs->ALUOut);
+  } else if (control->IorD && control->MemWrite) {
+    memory_write(
+        curr_pipe_regs->ALUOut,
+        curr_pipe_regs->B);  // 4c: Store to mem
+  } else {
+      assert(false);
+  }
 }
 
 void write_back() {
