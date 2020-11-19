@@ -37,7 +37,6 @@ static inline uint8_t get_instruction_type(int opcode) {
     case ADDI: return I_TYPE;
     case J: return J_TYPE;
     case BEQ: return I_TYPE;
-    case SLT: return R_TYPE;
     case EOP:
       return EOP_TYPE;
 
@@ -205,7 +204,10 @@ void execute() {
           next_pipe_regs->ALUOut =
               (unsigned int)alu_opA + (unsigned int)alu_opB;
           break;
-        default: assert(false);
+        case SLT: next_pipe_regs->ALUOut = alu_opA < alu_opB; break;
+        default:
+          printf("Unknown function: %d\n", IR_meta->function);
+          assert(false);
       };
       break;
     default: assert(false);
@@ -227,22 +229,18 @@ void memory_access() {
   ///@students: appropriate calls to functions defined in memory_hierarchy.c
   /// must be added
   struct ctrl_signals *control     = &arch_state.control;
-  struct instr_meta *IR_meta       = &arch_state.IR_meta;
   struct pipe_regs *curr_pipe_regs = &arch_state.curr_pipe_regs;
   struct pipe_regs *next_pipe_regs = &arch_state.next_pipe_regs;
 
-  if (!control->MemRead && !control->MemWrite) {
-    // We don't need to access memory if the control doesn't say so.
+  if (!control->IorD) {
     return;
   }
-  if (control->RegDst && control->MemtoReg) {  // 4a: Result write
-    memory_write(IR_meta->reg_11_15, curr_pipe_regs->ALUOut);
-  } else if (control->IorD && control->MemRead) {  // 4b: Load from mem
-    next_pipe_regs->MDR = memory_read(curr_pipe_regs->ALUOut);
-  } else if (control->IorD && control->MemWrite) {
-    memory_write(
-        curr_pipe_regs->ALUOut,
-        curr_pipe_regs->B);  // 4c: Store to mem
+  int addr = curr_pipe_regs->ALUOut;
+  if (control->MemRead) {
+    next_pipe_regs->MDR = memory_read(addr);
+  }
+  if (control->MemWrite) {
+    memory_write(addr, curr_pipe_regs->B);
   }
 }
 
@@ -252,7 +250,12 @@ void write_back() {
     int write_reg_id = control->RegDst ? arch_state.IR_meta.reg_11_15
                                        : arch_state.IR_meta.reg_16_20;
     check_is_valid_reg_id(write_reg_id);
-    int write_data = arch_state.curr_pipe_regs.ALUOut;
+    int write_data;
+    if (control->MemtoReg) {
+      write_data = arch_state.curr_pipe_regs.MDR;
+    } else {
+      write_data = arch_state.curr_pipe_regs.ALUOut;
+    }
     if (write_reg_id > 0) {
       arch_state.registers[write_reg_id] = write_data;
       // printf("Reg $%u = %d \n", write_reg_id, write_data);
@@ -289,8 +292,18 @@ void set_up_IR_meta(int IR, struct instr_meta *IR_meta) {
             IR_meta->reg_21_25,
             IR_meta->reg_16_20,
             IR_meta->function);
-      else
+      else if (IR_meta->function == ADDU)
+        printf(
+            "Executing ADDU(%d), $%u = $%u + $%u (function: %u) \n",
+            IR_meta->opcode,
+            IR_meta->reg_11_15,
+            IR_meta->reg_21_25,
+            IR_meta->reg_16_20,
+            IR_meta->function);
+      else {
+        printf("Unknown func code: %u\n", IR_meta->function);
         assert(false);
+      }
       break;
     case LW:
       printf(
@@ -350,6 +363,7 @@ void assign_pipeline_registers_for_the_next_cycle() {
   curr_pipe_regs->ALUOut = next_pipe_regs->ALUOut;
   curr_pipe_regs->A      = next_pipe_regs->A;
   curr_pipe_regs->B      = next_pipe_regs->B;
+  curr_pipe_regs->MDR    = next_pipe_regs->MDR;
   // We write if PCWrite or PCWriteCond and Cond
   if (control->PCWrite || (control->PCWriteCond && !next_pipe_regs->ALUOut)) {
     check_address_is_word_aligned(next_pipe_regs->pc);
@@ -382,8 +396,12 @@ int main(int argc, const char *argv[]) {
 
     write_back();
 
-    // printf( "$3: %d, $6: %d, $31; %d\n", arch_state.registers[3],
-    // arch_state.registers[6], arch_state.registers[31]);
+    printf(
+        "$1: %d, $2: %d, $3: %d, *7=%d\n",
+        arch_state.registers[1],
+        arch_state.registers[2],
+        arch_state.registers[3],
+        memory_read(7 << 2));
 
     assign_pipeline_registers_for_the_next_cycle();
 
