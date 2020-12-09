@@ -17,8 +17,8 @@ uint32_t cache_type = 0;
 
 static int len_tag = -1;
 static int len_index = -1;
-static int num_accs = 0;
 static void *cache = NULL;
+static int t = 0;
 
 static inline uint32_t bits_needed(int n) {
   for (int i = 0; i <= 32; i++) {
@@ -26,6 +26,19 @@ static inline uint32_t bits_needed(int n) {
       return i;
     }
   }
+  assert(0);
+}
+
+static inline void print_sw_stats() {
+  float r = (float)arch_state.mem_stats.sw_cache_hits /
+            (float)arch_state.mem_stats.sw_total;
+  printf("  SW hit rate: %.2f%\n", r * 100.0);
+}
+
+static inline void print_lw_stats() {
+  float r = (float)arch_state.mem_stats.lw_cache_hits /
+            (float)arch_state.mem_stats.lw_total;
+  printf("  LW hit rate: %.2f%\n", r * 100.0);
 }
 
 //-------------------------------------------------------------------
@@ -39,7 +52,7 @@ static inline uint32_t dmtag(uint32_t address) {
 static inline uint32_t dmindex(uint32_t address) {
   // printf("Tag mask: 0x%x, len tag: %u, len index: %u\n", TAG_MASK, len_tag,
   //      len_index);
-  return (address << len_tag) >> (len_tag + BLOCK_BITS);
+  return (address << len_tag) >> (32 - len_index);
 }
 
 static inline uint32_t dmoffset(uint32_t address) {
@@ -59,8 +72,8 @@ struct dmentry {
   int data[BLOCK_SIZE >> 2];
 };
 
-static inline struct dmentry *dmaccess(struct dmentry *cache, uint32_t index) {
-  return cache + index;
+static inline struct dmentry *dmaccess(uint32_t index) {
+  return (struct dmentry *)cache + index;
 }
 
 static void dminit() {
@@ -70,7 +83,7 @@ static void dminit() {
   cache = malloc(NUM_BLOCKS * sizeof(struct dmentry));
   struct dmentry *e = cache;
   for (int i = 0; i < NUM_BLOCKS; i++) {
-    (e + i)->valid = 0; // whatever is in the entry now is definetly not valid
+    (e++)->valid = 0; // whatever is in the entry now is definetly not valid
   }
 }
 
@@ -78,10 +91,10 @@ static struct dmentry *dmalloc(uint32_t address) {
   uint32_t tag = dmtag(address);
   uint32_t index = dmindex(address);
   printf("MISS\n  Allocating new block (tag: 0x%x, index: 0x%x)\n", tag, index);
-  struct dmentry *e = dmaccess(cache, index);
+  struct dmentry *e = dmaccess(index);
   uint32_t block_addr = address >> 2;
-  printf("  Copying %u bytes from 0x%x to 0x%x\n", BLOCK_SIZE, block_addr,
-         e->data);
+  printf("  Copying %u bytes from 0x%x to 0x%lx\n", BLOCK_SIZE, block_addr,
+         (uint64_t)e->data);
   memcpy(e->data, arch_state.memory + block_addr, BLOCK_SIZE);
   e->tag = tag;
   e->valid = 1;
@@ -94,7 +107,7 @@ static int dmread(int address) {
   uint32_t offset = dmoffset(address);
   printf("Reading 0x%x (tag: 0x%x, index: 0x%x, offset: 0x%x)...", address, tag,
          index, offset);
-  struct dmentry *e = dmaccess(cache, index);
+  struct dmentry *e = dmaccess(index);
   if (e->valid && (e->tag == tag)) {
     printf("HIT\n");
     ++arch_state.mem_stats.lw_cache_hits;
@@ -104,6 +117,7 @@ static int dmread(int address) {
   printf("  ");
   print_data(e->data);
   printf("  Returning 0x%x\n", (e->data)[offset >> 2]);
+  print_lw_stats();
   return (e->data)[offset >> 2];
 }
 
@@ -113,12 +127,13 @@ static void dmwrite(int address, int write_data) {
   uint32_t offset = dmoffset(address);
   printf("Writing 0x%x (tag: 0x%x, index: 0x%x, offset: 0x%x)\n", address, tag,
          index, offset);
-  struct dmentry *e = dmaccess(cache, index);
+  struct dmentry *e = dmaccess(index);
   if (e->valid && (e->tag == tag)) {
     (e->data)[offset >> 2] = write_data;
     ++arch_state.mem_stats.sw_cache_hits;
   }
   arch_state.memory[address >> 2] = write_data;
+  print_sw_stats();
 }
 
 //-------------------------------------------------------------------
@@ -132,8 +147,6 @@ static inline uint32_t fatag(uint32_t address) {
 static inline uint32_t faoffset(uint32_t address) {
   return address & OFFSET_MASK;
 }
-
-static int t = 0;
 
 struct faentry {
   char valid;
@@ -190,8 +203,8 @@ static struct faentry *faalloc(uint32_t address) {
   min_e->tag = tag;
   min_e->valid = 1;
   uint32_t block_addr = address >> 2;
-  printf("  Copyig %u bytes from 0x%x to 0x%x\n", BLOCK_SIZE, block_addr,
-         min_e->data);
+  printf("  Copyig %u bytes from 0x%x to 0x%lx\n", BLOCK_SIZE, block_addr,
+         (uint64_t)min_e->data);
   memcpy(min_e->data, arch_state.memory + block_addr, BLOCK_SIZE);
   min_e->dt = t;
   return min_e;
@@ -222,6 +235,7 @@ static int faread(int address) {
     e = faalloc(address);
   }
   printf("  Returning 0x%x\n", (e->data)[offset >> 2]);
+  print_lw_stats();
   return (e->data)[offset >> 2];
 }
 
@@ -237,6 +251,7 @@ static void fawrite(int address, int write_data) {
   }
   printf("Writing 0x%x to 0x%x\n", address, write_data);
   arch_state.memory[address >> 2] = write_data;
+  print_sw_stats();
 }
 
 //-------------------------------------------------------------------
@@ -317,8 +332,8 @@ static struct saentry *saalloc(uint32_t address) {
   min_e->tag = tag;
   min_e->valid = 1;
   uint32_t block_addr = address >> 2;
-  printf("  Copying %u bytes from 0x%x to 0x%x\n", BLOCK_SIZE, block_addr,
-         min_e->data);
+  printf("  Copying %u bytes from 0x%x to 0x%lx\n", BLOCK_SIZE, block_addr,
+         (uint64_t)min_e->data);
   memcpy(min_e->data, arch_state.memory + block_addr, BLOCK_SIZE);
   min_e->dt = t;
   return min_e;
@@ -331,7 +346,8 @@ static struct saentry *safind(uint32_t address) {
   e += (index << SET_BITS);
   for (int i = 0; i < NUM_BLOCKS_SET; i++, e++) {
     if (e->valid && e->tag == tag) {
-      printf("HIT\n  Found matching block (set: 0x%x, index: 0x%x)\n", index, i);
+      printf("HIT (%f%)\n  Found matching block (set: 0x%x, index: 0x%x)\n",
+             index, i);
       return e;
     }
   }
@@ -353,13 +369,12 @@ static int saread(int address) {
     e = saalloc(address);
   }
   printf("  Returning 0x%x\n", (e->data)[offset >> 2]);
+  print_lw_stats();
   return (e->data)[offset >> 2];
 }
 
 static void sawrite(int address, int write_data) {
   ++t;
-  uint32_t tag = satag(address);
-  uint32_t index = saindex(address);
   uint32_t offset = saoffset(address);
   struct saentry *e = safind(address);
   if (e) {
@@ -369,6 +384,7 @@ static void sawrite(int address, int write_data) {
   }
   printf("Writing 0x%x to 0x%x\n", address, write_data);
   arch_state.memory[address >> 2] = write_data;
+  print_sw_stats();
 }
 
 //-------------------------------------------------------------------
@@ -376,8 +392,7 @@ static void sawrite(int address, int write_data) {
 //-------------------------------------------------------------------
 
 void memory_state_init(struct architectural_state *arch_state_ptr) {
-  arch_state_ptr->memory =
-      (uint32_t *)malloc(sizeof(uint32_t) * MEMORY_WORD_NUM);
+  arch_state_ptr->memory = malloc(sizeof(uint32_t) * MEMORY_WORD_NUM);
   memset(arch_state_ptr->memory, 0, sizeof(uint32_t) * MEMORY_WORD_NUM);
   if (cache_size == 0) {
     // CACHE DISABLED
