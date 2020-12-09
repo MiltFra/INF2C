@@ -8,7 +8,7 @@
 
 #include "mipssim.h"
 
-#define BREAK_POINT 200000 // exit after so many cycles -- useful for debugging
+#define BREAK_POINT 2000 // exit after so many cycles -- useful for debugging
 
 // Global variables
 char mem_init_path[1000];
