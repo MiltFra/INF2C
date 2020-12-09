@@ -79,7 +79,7 @@ static struct dmentry *dmalloc(uint32_t address) {
   uint32_t index = dmindex(address);
   printf("MISS\n  Allocating new block (tag: 0x%x, index: 0x%x)\n", tag, index);
   struct dmentry *e = dmaccess(cache, index);
-  uint32_t block_addr = address >> (BLOCK_BITS - 2);
+  uint32_t block_addr = address >> 2;
   printf("  Copying %u bytes from 0x%x to 0x%x\n", BLOCK_SIZE, block_addr,
          e->data);
   memcpy(e->data, arch_state.memory + block_addr, BLOCK_SIZE);
@@ -189,8 +189,8 @@ static struct faentry *faalloc(uint32_t address) {
   // updating entry
   min_e->tag = tag;
   min_e->valid = 1;
-  uint32_t block_addr = address >> (BLOCK_BITS - 2);
-  printf("  Copyig %u bytes from 0x%x ot 0x%x\n", BLOCK_SIZE, block_addr,
+  uint32_t block_addr = address >> 2;
+  printf("  Copyig %u bytes from 0x%x to 0x%x\n", BLOCK_SIZE, block_addr,
          min_e->data);
   memcpy(min_e->data, arch_state.memory + block_addr, BLOCK_SIZE);
   min_e->dt = t;
@@ -209,6 +209,7 @@ static struct faentry *fafind(int tag) {
 }
 
 static int faread(int address) {
+  ++t;
   uint32_t tag = fatag(address);
   uint32_t offset = faoffset(address);
   printf("Reading 0x%x (tag: 0x%x, offset: 0x%x)... ", address, tag, offset);
@@ -216,6 +217,7 @@ static int faread(int address) {
   if (e) {
     printf("HIT\n");
     ++arch_state.mem_stats.lw_cache_hits;
+    e->dt = t;
   } else {
     e = faalloc(address);
   }
@@ -224,12 +226,14 @@ static int faread(int address) {
 }
 
 static void fawrite(int address, int write_data) {
+  ++t;
   uint32_t tag = fatag(address);
   uint32_t offset = faoffset(address);
   struct faentry *e = fafind(tag);
   if (e) {
     ++arch_state.mem_stats.sw_cache_hits;
     e->data[offset >> 2] = write_data;
+    e->dt = t;
   }
   printf("Writing 0x%x to 0x%x\n", address, write_data);
   arch_state.memory[address >> 2] = write_data;
@@ -278,12 +282,13 @@ static void sainit() {
 static struct saentry *saalloc(uint32_t address) {
   uint32_t tag = satag(address);
   uint32_t index = saindex(address);
-  printf("MISS\n Allocationg new block (tag: 0x%x, set: 0x%x)\n", tag, index);
+  printf("MISS\n  Allocationg new block (tag: 0x%x, set: 0x%x)\n", tag, index);
+  // Finding line to evict/populate
   struct saentry *e, *min_e;
   e = cache;
   min_e = e += (index << SET_BITS);
   int min_i = 0;
-  for (int i = 1; i < NUM_BLOCKS_SET; i++, e++) {
+  for (int i = 0; i < NUM_BLOCKS_SET; i++, e++) {
     if (!e->valid) {
       min_i = i;
       min_e = e;
@@ -295,24 +300,76 @@ static struct saentry *saalloc(uint32_t address) {
       min_e = e;
     }
   }
+  printf("  New location: set: 0x%x, index: 0x%x\n", index, min_i);
+  // re-centering time stamps
+  e = cache;
+  // We're resetting all the time stamps, not just in the current set,
+  // for simplicity. Otherwise we would have to manage separate t's for
+  // every set.
+  for (int i = 0; i < NUM_BLOCKS; i++) {
+    if (e->valid) {
+      e->dt -= t;
+    }
+    e++;
+  }
+  t = 0;
+  // updating entry
+  min_e->tag = tag;
+  min_e->valid = 1;
+  uint32_t block_addr = address >> 2;
+  printf("  Copying %u bytes from 0x%x to 0x%x\n", BLOCK_SIZE, block_addr,
+         min_e->data);
+  memcpy(min_e->data, arch_state.memory + block_addr, BLOCK_SIZE);
+  min_e->dt = t;
+  return min_e;
 }
 
 static struct saentry *safind(uint32_t address) {
+  uint32_t index = saindex(address);
   uint32_t tag = satag(address);
-  uint32_t index = satag(address);
   struct saentry *e = cache;
   e += (index << SET_BITS);
   for (int i = 0; i < NUM_BLOCKS_SET; i++, e++) {
     if (e->valid && e->tag == tag) {
+      printf("HIT\n  Found matching block (set: 0x%x, index: 0x%x)\n", index, i);
       return e;
     }
   }
   return NULL;
 }
 
-static int saread(int address) {}
+static int saread(int address) {
+  ++t;
+  uint32_t tag = satag(address);
+  uint32_t index = saindex(address);
+  uint32_t offset = saoffset(address);
+  printf("Reading 0x%x (tag: 0x%x, set: 0x%x, offset: 0x%x)... ", address, tag,
+         index, offset);
+  struct saentry *e = safind(address);
+  if (e) {
+    ++arch_state.mem_stats.lw_cache_hits;
+    e->dt = t;
+  } else {
+    e = saalloc(address);
+  }
+  printf("  Returning 0x%x\n", (e->data)[offset >> 2]);
+  return (e->data)[offset >> 2];
+}
 
-static void sawrite(int address, int write_data) {}
+static void sawrite(int address, int write_data) {
+  ++t;
+  uint32_t tag = satag(address);
+  uint32_t index = saindex(address);
+  uint32_t offset = saoffset(address);
+  struct saentry *e = safind(address);
+  if (e) {
+    ++arch_state.mem_stats.sw_cache_hits;
+    e->data[offset >> 2] = write_data;
+    e->dt = t;
+  }
+  printf("Writing 0x%x to 0x%x\n", address, write_data);
+  arch_state.memory[address >> 2] = write_data;
+}
 
 //-------------------------------------------------------------------
 // Public Functions
@@ -340,6 +397,7 @@ void memory_state_init(struct architectural_state *arch_state_ptr) {
       fainit();
       break;
     case CACHE_TYPE_2_WAY: // 2-way associative
+      sainit();
       break;
     }
     memory_stats_init(arch_state_ptr, len_tag);
@@ -368,7 +426,7 @@ int memory_read(int address) {
     case CACHE_TYPE_FULLY_ASSOC: // fully associative
       return faread(address);
     case CACHE_TYPE_2_WAY: // 2-way associative
-      break;
+      return saread(address);
     }
   }
   return 0;
@@ -396,6 +454,7 @@ void memory_write(int address, int write_data) {
       fawrite(address, write_data);
       break;
     case CACHE_TYPE_2_WAY: // 2-way associative
+      sawrite(address, write_data);
       break;
     }
   }
