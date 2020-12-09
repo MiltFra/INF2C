@@ -32,13 +32,13 @@ static inline uint32_t bits_needed(int n) {
 static inline void print_sw_stats() {
   float r = (float)arch_state.mem_stats.sw_cache_hits /
             (float)arch_state.mem_stats.sw_total;
-  printf("  SW hit rate: %.2f%\n", r * 100.0);
+  printf("  SW hit rate: %.2f percent\n", r * 100.0);
 }
 
 static inline void print_lw_stats() {
   float r = (float)arch_state.mem_stats.lw_cache_hits /
             (float)arch_state.mem_stats.lw_total;
-  printf("  LW hit rate: %.2f%\n", r * 100.0);
+  printf("  LW hit rate: %.5f percent\n", r * 100.0);
 }
 
 //-------------------------------------------------------------------
@@ -346,7 +346,7 @@ static struct saentry *safind(uint32_t address) {
   e += (index << SET_BITS);
   for (int i = 0; i < NUM_BLOCKS_SET; i++, e++) {
     if (e->valid && e->tag == tag) {
-      printf("HIT (%f%)\n  Found matching block (set: 0x%x, index: 0x%x)\n",
+      printf("HIT\n  Found matching block (set: 0x%x, index: 0x%x)\n",
              index, i);
       return e;
     }
