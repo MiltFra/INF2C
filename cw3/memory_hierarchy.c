@@ -77,7 +77,8 @@ static inline struct dmentry *dmaccess(uint32_t index) {
 }
 
 static void dminit() {
-  printf("Initialising DM cache\n");
+  printf("Initialising DM cache (size: %u, block size: %u, num blocks: %u)\n",
+         cache_size, BLOCK_SIZE, NUM_BLOCKS);
   len_index = bits_needed(NUM_BLOCKS);
   len_tag = 32 - BLOCK_BITS - len_index;
   cache = malloc(NUM_BLOCKS * sizeof(struct dmentry));
@@ -92,7 +93,7 @@ static struct dmentry *dmalloc(uint32_t address) {
   uint32_t index = dmindex(address);
   printf("MISS\n  Allocating new block (tag: 0x%x, index: 0x%x)\n", tag, index);
   struct dmentry *e = dmaccess(index);
-  uint32_t block_addr = address >> 2;
+  uint32_t block_addr = (address >> BLOCK_BITS) << (BLOCK_BITS - 2);
   printf("  Copying %u bytes from 0x%x to 0x%lx\n", BLOCK_SIZE, block_addr,
          (uint64_t)e->data);
   memcpy(e->data, arch_state.memory + block_addr, BLOCK_SIZE);
@@ -406,8 +407,7 @@ void memory_state_init(struct architectural_state *arch_state_ptr) {
 
     switch (cache_type) {
     case CACHE_TYPE_DIRECT: // direct mapped
-      SET_BITS = 0;
-      sainit();
+      dminit();
       break;
     case CACHE_TYPE_FULLY_ASSOC: // fully associative
       fainit();
@@ -428,7 +428,13 @@ int memory_read(int address) {
 
   if (cache_size == 0) {
     // CACHE DISABLED
-    return (int)arch_state.memory[address / 4];
+    uint32_t base_addr = (address >> BLOCK_BITS) << BLOCK_BITS;
+    printf("Reading 0x%x (block: 0x%x, offset: 0x%x)\n  ", address,
+           base_addr >> BLOCK_BITS, address & OFFSET_MASK);
+    int v = arch_state.memory[address / 4];
+    print_data(arch_state.memory + (base_addr >> 2));
+    printf("  Returning 0x%08x\n", v);
+    return v;
   } else {
     // CACHE ENABLED
 
@@ -439,7 +445,7 @@ int memory_read(int address) {
     }
     switch (cache_type) {
     case CACHE_TYPE_DIRECT: // direct mapped
-      return saread(address);
+      return dmread(address);
     case CACHE_TYPE_FULLY_ASSOC: // fully associative
       return faread(address);
     case CACHE_TYPE_2_WAY: // 2-way associative
@@ -457,6 +463,8 @@ void memory_write(int address, int write_data) {
   if (cache_size == 0) {
     // CACHE DISABLED
     arch_state.memory[address / 4] = (uint32_t)write_data;
+    printf("Writing 0x%x (block: 0x%x, offset: 0x%x)\n", address,
+           address >> BLOCK_BITS, address & OFFSET_MASK);
   } else {
     // CACHE ENABLED
 
@@ -465,7 +473,7 @@ void memory_write(int address, int write_data) {
 
     switch (cache_type) {
     case CACHE_TYPE_DIRECT: // direct mapped
-      sawrite(address, write_data);
+      dmwrite(address, write_data);
       break;
     case CACHE_TYPE_FULLY_ASSOC: // fully associative
       fawrite(address, write_data);
