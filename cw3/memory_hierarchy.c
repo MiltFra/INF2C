@@ -203,7 +203,7 @@ static struct faentry *faalloc(uint32_t address) {
   // updating entry
   min_e->tag = tag;
   min_e->valid = 1;
-  uint32_t block_addr = address >> 2;
+  uint32_t block_addr = (address >> BLOCK_BITS) << (BLOCK_BITS - 2);
   printf("  Copyig %u bytes from 0x%x to 0x%lx\n", BLOCK_SIZE, block_addr,
          (uint64_t)min_e->data);
   memcpy(min_e->data, arch_state.memory + block_addr, BLOCK_SIZE);
@@ -264,11 +264,11 @@ static uint32_t SET_BITS;
 #define NUM_BLOCKS_SET (1 << SET_BITS)
 
 static inline uint32_t satag(uint32_t address) {
-  return address >> (32 - len_tag);
+  return address >> (31 - len_tag);
 }
 
 static inline uint32_t saindex(uint32_t address) {
-  return (address << len_tag) >> (32 - len_index);
+  return (address << len_tag) >> (31 - len_index);
 }
 
 static inline uint32_t saoffset(uint32_t address) {
@@ -283,9 +283,11 @@ struct saentry {
 };
 
 static void sainit() {
-  printf("Initialising %d-way SA cache\n", 1 << SET_BITS);
   len_index = bits_needed(NUM_SETS);
   len_tag = 32 - len_index - BLOCK_BITS;
+  printf("Initialising %d-way SA cache (tag: %d, index: %d, sets: %d, blocks "
+         "in set: %d)\n",
+         1 << SET_BITS, len_tag, len_index, NUM_SETS, NUM_BLOCKS_SET);
   cache = malloc(NUM_BLOCKS * sizeof(struct saentry));
   struct saentry *e = cache;
   for (int i = 0; i < NUM_BLOCKS; i++) {
@@ -332,7 +334,7 @@ static struct saentry *saalloc(uint32_t address) {
   // updating entry
   min_e->tag = tag;
   min_e->valid = 1;
-  uint32_t block_addr = address >> 2;
+  uint32_t block_addr = (address >> BLOCK_BITS) << (BLOCK_BITS - 2);
   printf("  Copying %u bytes from 0x%x to 0x%lx\n", BLOCK_SIZE, block_addr,
          (uint64_t)min_e->data);
   memcpy(min_e->data, arch_state.memory + block_addr, BLOCK_SIZE);
@@ -342,6 +344,7 @@ static struct saentry *saalloc(uint32_t address) {
 
 static struct saentry *safind(uint32_t address) {
   uint32_t index = saindex(address);
+  uint32_t x = address;
   uint32_t tag = satag(address);
   struct saentry *e = cache;
   e += (index << SET_BITS);
@@ -360,7 +363,7 @@ static int saread(int address) {
   uint32_t tag = satag(address);
   uint32_t index = saindex(address);
   uint32_t offset = saoffset(address);
-  printf("Reading 0x%x (tag: 0x%x, set: 0x%x, offset: 0x%x)... ", address, tag,
+  printf("Reading 0x%x (tag: 0x%x, set: 0x%x, offset: 0x%x)...", address, tag,
          index, offset);
   struct saentry *e = safind(address);
   if (e) {
@@ -369,6 +372,8 @@ static int saread(int address) {
   } else {
     e = saalloc(address);
   }
+  printf("  ");
+  print_data(e->data);
   printf("  Returning 0x%x\n", (e->data)[offset >> 2]);
   print_lw_stats();
   return (e->data)[offset >> 2];
