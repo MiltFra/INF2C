@@ -258,7 +258,7 @@ static void fawrite(int address, int write_data) {
 // Set associative
 //-------------------------------------------------------------------
 
-#define SET_BITS 1
+static uint32_t SET_BITS;
 #define NUM_SETS (NUM_BLOCKS >> SET_BITS)
 #define NUM_BLOCKS_SET (1 << SET_BITS)
 
@@ -346,8 +346,8 @@ static struct saentry *safind(uint32_t address) {
   e += (index << SET_BITS);
   for (int i = 0; i < NUM_BLOCKS_SET; i++, e++) {
     if (e->valid && e->tag == tag) {
-      printf("HIT\n  Found matching block (set: 0x%x, index: 0x%x)\n",
-             index, i);
+      printf("HIT\n  Found matching block (set: 0x%x, index: 0x%x)\n", index,
+             i);
       return e;
     }
   }
@@ -406,12 +406,14 @@ void memory_state_init(struct architectural_state *arch_state_ptr) {
 
     switch (cache_type) {
     case CACHE_TYPE_DIRECT: // direct mapped
-      dminit();
+      SET_BITS = 0;
+      sainit();
       break;
     case CACHE_TYPE_FULLY_ASSOC: // fully associative
       fainit();
       break;
     case CACHE_TYPE_2_WAY: // 2-way associative
+      SET_BITS = 1;
       sainit();
       break;
     }
@@ -437,7 +439,7 @@ int memory_read(int address) {
     }
     switch (cache_type) {
     case CACHE_TYPE_DIRECT: // direct mapped
-      return dmread(address);
+      return saread(address);
     case CACHE_TYPE_FULLY_ASSOC: // fully associative
       return faread(address);
     case CACHE_TYPE_2_WAY: // 2-way associative
@@ -463,7 +465,7 @@ void memory_write(int address, int write_data) {
 
     switch (cache_type) {
     case CACHE_TYPE_DIRECT: // direct mapped
-      dmwrite(address, write_data);
+      sawrite(address, write_data);
       break;
     case CACHE_TYPE_FULLY_ASSOC: // fully associative
       fawrite(address, write_data);
