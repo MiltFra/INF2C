@@ -46,13 +46,13 @@ static inline void print_lw_stats() {
 //-------------------------------------------------------------------
 
 static inline uint32_t dmtag(uint32_t address) {
-  return address >> (31 - len_tag);
+  return address >> (32 - len_tag);
 }
 
 static inline uint32_t dmindex(uint32_t address) {
   // printf("Tag mask: 0x%x, len tag: %u, len index: %u\n", TAG_MASK, len_tag,
   //      len_index);
-  return (address << len_tag) >> (31 - len_index);
+  return (address << len_tag) >> (32 - len_index);
 }
 
 static inline uint32_t dmoffset(uint32_t address) {
@@ -142,7 +142,7 @@ static void dmwrite(int address, int write_data) {
 //-------------------------------------------------------------------
 
 static inline uint32_t fatag(uint32_t address) {
-  return address >> (31 - len_tag);
+  return address >> (32 - len_tag);
 }
 
 static inline uint32_t faoffset(uint32_t address) {
